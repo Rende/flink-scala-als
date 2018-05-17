@@ -1,7 +1,5 @@
 package dfki
 
-import java.util
-
 import com.sksamuel.elastic4s.ElasticDsl.{search, termsAgg}
 import com.sksamuel.elastic4s.{ElasticsearchClientUri, TcpClient}
 import org.elasticsearch.common.settings.Settings
@@ -9,9 +7,10 @@ import com.sksamuel.elastic4s.ElasticDsl._
 import com.sksamuel.elastic4s.searches.RichSearchResponse
 
 import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
 class ElasticService() {
-  var client:TcpClient = null
+  var client: TcpClient = _
   val settings = Settings.builder().put("cluster.name", "wiki-cluster").build()
 
   def getClient():TcpClient = {
@@ -23,7 +22,7 @@ class ElasticService() {
   def getClusterIds() = {
     val response = getClient().execute {
       search("cluster-entry-index/cluster-entries").matchAllQuery().aggs {
-        termsAgg("clusters", "cluster-id").size(Int.MaxValue)
+        termsAgg("clusters", "cluster-id").size(3)
       }
     }.await
 
@@ -36,11 +35,11 @@ class ElasticService() {
       search("wikidata-index/wikidata-entities").termQuery("_id",id).size(1)
     }.await
 
-    var aliases:util.ArrayList[String] = null
+    var aliases: Array[String] = null
     if(isResponseValid(response)){
-      aliases = response.hits(0).sourceField("aliases").asInstanceOf[util.ArrayList[String]]
+      aliases = response.hits(0).sourceField("tok-aliases").asInstanceOf[java.util.ArrayList[String]].asScala.toArray
     }
-    aliases.toList
+    aliases
   }
 
   private def isResponseValid(response: RichSearchResponse) = response != null && response.totalHits > 0
