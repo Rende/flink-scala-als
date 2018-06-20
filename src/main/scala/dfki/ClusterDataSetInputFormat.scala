@@ -11,7 +11,6 @@ import collection.mutable.ListBuffer
 import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
 
-
 class ClusterDataSetInputFormat(splits: List[String]) extends RichInputFormat[Tuple3[String, Array[String], String], ClusterIdInputSplit] {
 
   private final val minClusterSize = 10000
@@ -42,7 +41,7 @@ class ClusterDataSetInputFormat(splits: List[String]) extends RichInputFormat[Tu
   }
 
   override def open(split: ClusterIdInputSplit): Unit = {
-    searchResponse = esClient.getClient().execute {
+    searchResponse = esClient.getClient.execute {
       search("cluster-entry-index/cluster-entries").matchQuery("cluster-id", split.getClusterId).scroll("1m").size(10000)
     }.await
   }
@@ -60,7 +59,7 @@ class ClusterDataSetInputFormat(splits: List[String]) extends RichInputFormat[Tu
     val relationId: String = searchResponse.hits(currentRecord).sourceField("relation-id").toString
 
     if (isLastRecord) {
-      scroll()
+      scroll
       currentRecord = 0
     }
     else
@@ -72,11 +71,11 @@ class ClusterDataSetInputFormat(splits: List[String]) extends RichInputFormat[Tu
 
   override def close(): Unit = {}
 
-  def isLastRecord(): Boolean =
+  def isLastRecord: Boolean =
     currentRecord == searchResponse.hits.length - 1
 
-  def scroll(): Unit = {
-    searchResponse = esClient.getClient().execute(searchScroll(searchResponse.scrollId, "1m")).await
+  def scroll: Unit = {
+    searchResponse = esClient.getClient.execute(searchScroll(searchResponse.scrollId, "1m")).await
   }
 
   def toInt(s: String): Int = {

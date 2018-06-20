@@ -40,7 +40,8 @@ lazy val root = (project in file(".")).
   settings(
     libraryDependencies ++= flinkDependencies,
     libraryDependencies ++= elasticsearchDependencies,
-    libraryDependencies += "ch.qos.logback" % "logback-classic" % "1.1.3" % Runtime
+    libraryDependencies += "ch.qos.logback" % "logback-classic" % "1.2.3",
+    libraryDependencies += "com.typesafe.scala-logging" %% "scala-logging" % "3.9.0"
   )
 assemblyMergeStrategy in assembly := {
   case PathList("META-INF", xs@_*) =>
@@ -55,7 +56,7 @@ assemblyMergeStrategy in assembly := {
 }
 
 
-assembly / mainClass := Some("dfki.Job")
+assembly / mainClass := Some("dfki.MatrixDecompositionJob")
 
 // make run command include the provided dependencies
 Compile / run := Defaults.runTask(Compile / fullClasspath,

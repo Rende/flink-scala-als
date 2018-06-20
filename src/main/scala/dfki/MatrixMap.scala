@@ -1,16 +1,22 @@
 package dfki
 
 
+import com.typesafe.scalalogging.Logger
 import org.apache.flink.api.common.functions.RichFlatMapFunction
 import org.apache.flink.configuration.Configuration
 import org.apache.flink.util.Collector
+import org.slf4j.LoggerFactory
 
+import scala.collection.immutable.ListMap
 import scala.collection.mutable.HashMap
 
 class MatrixMap extends RichFlatMapFunction[(String, Array[String], String), (Int, String, Int, String, Double)] {
+  val logger = Logger(LoggerFactory.getLogger("MatrixMap"))
+
   @transient var esClient: ElasticService = _
   @transient var pairMap: HashMap[String, Int] = _
-  @transient var relationMap: HashMap[String, (Int, Int)] = _
+  @transient var aliasMap: HashMap[String, Int] = _
+  @transient var relationMap: HashMap[String, Int] = _
   @transient var pairId: Int = 0
   @transient var relationSetId: Int = 0
 
@@ -19,24 +25,21 @@ class MatrixMap extends RichFlatMapFunction[(String, Array[String], String), (In
     val pairId = generateIdForEntityPairs(tuple._1)
     // first insert aliases
     val aliases: Array[String] = esClient.getRelationAliases(tuple._3)
-    for (alias: String <- aliases) {
-      if (!alias.isEmpty) {
-        val (aliasId, key) = generateIdForRelation(alias.split(" "), pairId)
-        if (aliasId != -1) {
-          out.collect(pairId, tuple._1, aliasId, key, 1)
-        }
-      }
+    fillAliasMap(aliases)
+    for ((alias, id) <- aliasMap) {
+      out.collect(pairId, tuple._1, id, alias, 1)
     }
-    //then insert the relation phrases
+
+    //insert relation phrase
     if (!tuple._2.isEmpty) {
-      val (relationPhraseId, key) = generateIdForRelation(tuple._2, pairId)
-      if (relationPhraseId != -1)
-        out.collect(pairId, tuple._1, relationPhraseId, key, 0.5)
+      val key = appendPhrases(tuple._2)
+      if (!key.isEmpty && !aliasMap.contains(key)) {
+        out.collect(pairId, tuple._1, generateIdForRelation(key), key, 0.5)
+      }
     }
   }
 
   def generateIdForEntityPairs(pair: String): Int = {
-
     if (pairMap.contains(pair)) {
       pairMap(pair)
     }
@@ -47,33 +50,40 @@ class MatrixMap extends RichFlatMapFunction[(String, Array[String], String), (In
     }
   }
 
-  def generateIdForRelation(relationArray: Array[String], pairId: Int): (Int, String) = {
+  def generateIdForRelation(key: String): Int = {
+    if (relationMap.contains(key)) {
+      relationMap(key)
+    } else {
+      relationSetId += 1
+      relationMap += key -> relationSetId
+      relationSetId
+    }
+  }
+
+  def fillAliasMap(aliasArray: Array[String]): Unit = {
+    for (alias: String <- aliasArray) {
+      val key = appendPhrases(alias.split(" "))
+      if (!key.isEmpty && !aliasMap.contains(key)) {
+        relationSetId += 1
+        aliasMap += key -> relationSetId
+      }
+    }
+  }
+
+  def appendPhrases(relationArray: Array[String]): String = {
     val relationPhrases: Array[String] = relationArray.sortWith(_ > _)
     var key: String = ""
     for (relationPhrase: String <- relationPhrases) {
-      key = relationPhrase + "|" + key
+      key = relationPhrase + "_" + key
     }
-    key = key.trim
-    if (!key.isEmpty) {
-      if (relationMap.contains(key)) {
-        val (prevPairId, relationId) = relationMap(key)
-        if (prevPairId == pairId) (-1, "") else (relationId, key)
-
-      } else {
-        relationSetId += 1
-        relationMap += key -> (pairId, relationSetId)
-        (relationSetId, key)
-      }
-    }
-    else {
-      (-1, "")
-    }
+    key.trim
   }
 
   override def open(config: Configuration): Unit = {
     esClient = new ElasticService()
+    aliasMap = new HashMap[String, Int]
     pairMap = new HashMap[String, Int]
-    relationMap = new HashMap[String, (Int, Int)]
+    relationMap = new HashMap[String, Int]
     pairId = 0
     relationSetId = 0
   }
